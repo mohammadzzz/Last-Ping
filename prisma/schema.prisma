@@ -1,0 +1,244 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===== Enums =====
+
+enum AppMode {
+  ACTIVE
+  WARNING
+  RELEASED
+}
+
+enum OtpChannel {
+  EMAIL
+  SMS
+}
+
+enum ReleaseTrigger {
+  INACTIVITY
+  MANUAL
+  TEST
+}
+
+enum ReleaseStatus {
+  PENDING
+  VERIFIED
+  DOWNLOADING
+  DOWNLOADED
+  EXPIRED
+  DELETED
+}
+
+enum CheckinSource {
+  LOGIN
+  LINK
+}
+
+enum Channel {
+  EMAIL
+  TELEGRAM
+  SMS
+  WHATSAPP
+}
+
+enum NotifPurpose {
+  WARNING
+  RELEASE
+  OTP
+  REMINDER
+  TEST
+}
+
+enum NotifStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+enum JobStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
+// ===== Models =====
+
+model Owner {
+  id               String   @id @default(uuid())
+  email            String   @unique
+  passwordHash     String
+  totpSecretEnc    Bytes
+  totpEnrolled     Boolean  @default(false)
+  checkinPinHash   String
+  checkinLinkToken String   @unique
+  createdAt        DateTime @default(now())
+}
+
+model AppState {
+  id               Int       @id @default(1)
+  mode             AppMode   @default(ACTIVE)
+  testMode         Boolean   @default(false)
+  lastCheckinAt    DateTime  @default(now())
+  warningStartedAt DateTime?
+  releasedAt       DateTime?
+  updatedAt        DateTime  @updatedAt
+}
+
+model Recipient {
+  id                  String                    @id @default(uuid())
+  displayName         String
+  email               String?
+  phone               String?
+  telegramChatId      String?
+  whatsappNumber      String?
+  preferredOtpChannel OtpChannel                @default(EMAIL)
+  personalMessage     String                    @default("")
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  assignments         RecipientFileAssignment[]
+  releaseRecipients   ReleaseRecipient[]
+}
+
+model MediaFile {
+  id           String                    @id @default(uuid())
+  originalName String
+  mimeType     String
+  sizeBytes    BigInt
+  storagePath  String
+  nonce        Bytes
+  authTag      Bytes
+  wrappedDek   Bytes
+  sha256       String
+  isSample     Boolean                   @default(false)
+  createdAt    DateTime                  @default(now())
+  assignments  RecipientFileAssignment[]
+}
+
+model RecipientFileAssignment {
+  recipientId String
+  fileId      String
+  createdAt   DateTime  @default(now())
+  recipient   Recipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  file        MediaFile @relation(fields: [fileId], references: [id], onDelete: Restrict)
+
+  @@id([recipientId, fileId])
+}
+
+model Release {
+  id           String             @id @default(uuid())
+  triggeredAt  DateTime           @default(now())
+  trigger      ReleaseTrigger
+  isTest       Boolean            @default(false)
+  recipients   ReleaseRecipient[]
+}
+
+model ReleaseRecipient {
+  id                  String        @id @default(uuid())
+  releaseId           String
+  recipientId         String
+  downloadTokenHash   String        @unique
+  status              ReleaseStatus @default(PENDING)
+  expiresAt           DateTime
+  downloadCompletedAt DateTime?
+  deleteAfter         DateTime?
+  zipPath             String?
+  zipSizeBytes        BigInt?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  release             Release       @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  recipient           Recipient     @relation(fields: [recipientId], references: [id])
+  codes               VerificationCode[]
+  sessions            DownloadSession[]
+
+  @@index([recipientId])
+  @@index([status])
+}
+
+model VerificationCode {
+  id                 String           @id @default(uuid())
+  releaseRecipientId String
+  codeHash           String
+  channel            OtpChannel
+  sentTo             String
+  attempts           Int              @default(0)
+  expiresAt          DateTime
+  consumedAt         DateTime?
+  createdAt          DateTime         @default(now())
+  releaseRecipient   ReleaseRecipient @relation(fields: [releaseRecipientId], references: [id], onDelete: Cascade)
+
+  @@index([releaseRecipientId])
+}
+
+model DownloadSession {
+  id                 String           @id @default(uuid())
+  releaseRecipientId String
+  startedAt          DateTime         @default(now())
+  completedAt        DateTime?
+  bytesServed        BigInt           @default(0)
+  bytesExpected      BigInt
+  clientIpHash       String
+  userAgent          String
+  releaseRecipient   ReleaseRecipient @relation(fields: [releaseRecipientId], references: [id], onDelete: Cascade)
+
+  @@index([releaseRecipientId])
+}
+
+model CheckinRecord {
+  id     String        @id @default(uuid())
+  at     DateTime      @default(now())
+  source CheckinSource
+  ipHash String
+}
+
+model NotificationAttempt {
+  id                String        @id @default(uuid())
+  recipientId       String?
+  channel           Channel
+  purpose           NotifPurpose
+  status            NotifStatus   @default(QUEUED)
+  providerMessageId String?
+  error             String?
+  attemptedAt       DateTime      @default(now())
+
+  @@index([recipientId])
+  @@index([purpose, attemptedAt])
+}
+
+model DeletionJob {
+  id                 String    @id @default(uuid())
+  releaseRecipientId String    @unique
+  scheduledFor       DateTime
+  executedAt         DateTime?
+  status             JobStatus @default(PENDING)
+  error              String?
+
+  @@index([status, scheduledFor])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  at         DateTime @default(now())
+  actor      String
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   Json?
+
+  @@index([at])
+  @@index([actor])
+}
+
+model RateLimitBucket {
+  key         String    @id
+  count       Int       @default(0)
+  windowStart DateTime
+  lockedUntil DateTime?
+  updatedAt   DateTime  @updatedAt
+}

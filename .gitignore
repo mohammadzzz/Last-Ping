@@ -1,0 +1,12 @@
+node_modules
+.next
+.env
+.env.local
+.env.*.local
+dist
+data/
+*.log
+.DS_Store
+coverage
+next-env.d.ts
+tsconfig.tsbuildinfo
