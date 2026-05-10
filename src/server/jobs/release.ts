@@ -4,6 +4,9 @@ import { env } from "@/lib/env";
 import { randomToken, hashToken } from "@/server/crypto/tokens";
 import { notify } from "@/server/notifications";
 import { audit } from "@/server/audit";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("release");
 
 /**
  * Trigger a release. Creates a Release row and one ReleaseRecipient per
@@ -33,9 +36,21 @@ export async function triggerRelease(opts: {
   });
 
   if (recipients.length === 0) {
+    log.warn({ trigger: opts.trigger, isTest: !!opts.isTest }, "release empty: no recipients");
     await audit("system", "RELEASE_EMPTY", { metadata: { trigger: opts.trigger } });
     return { skipped: true, reason: "no-recipients" };
   }
+
+  log.warn(
+    {
+      trigger: opts.trigger,
+      isTest: !!opts.isTest,
+      recipientCount: recipients.length,
+      from: state.mode,
+      to: opts.isTest ? state.mode : "RELEASED",
+    },
+    "release triggered",
+  );
 
   const release = await prisma.release.create({
     data: { trigger: opts.trigger, isTest: !!opts.isTest },
@@ -91,15 +106,49 @@ This link expires on ${expiresAt.toUTCString()}.
     // For test releases, only notify the owner's own contact methods, not the
     // recipient — prevents surprise messages during rehearsal.
     if (opts.isTest) {
-      const ownerEmail = env().OWNER_CONTACT_EMAIL;
-      if (ownerEmail) {
+      const channels = env().OWNER_WARNING_CHANNELS;
+      const testSubject = `[TEST] Would-send to ${recipient.displayName}`;
+      const testShort = `[TEST] Would-send to ${recipient.displayName}. Open: ${link}`;
+      if (channels.includes("EMAIL") && env().OWNER_CONTACT_EMAIL) {
         await notify({
           recipientId,
           channel: "EMAIL",
           purpose: "TEST",
-          to: ownerEmail,
-          subject: `[TEST] Would-send to ${recipient.displayName}`,
+          to: env().OWNER_CONTACT_EMAIL!,
+          subject: testSubject,
           text: body,
+        });
+      }
+      if (channels.includes("TELEGRAM") && env().TELEGRAM_OWNER_CHAT_ID) {
+        await notify({
+          recipientId,
+          channel: "TELEGRAM",
+          purpose: "TEST",
+          to: env().TELEGRAM_OWNER_CHAT_ID!,
+          text: testShort,
+        });
+      }
+      if (channels.includes("SMS") && env().OWNER_CONTACT_PHONE) {
+        await notify({
+          recipientId,
+          channel: "SMS",
+          purpose: "TEST",
+          to: env().OWNER_CONTACT_PHONE!,
+          text: testShort,
+        });
+      }
+      if (channels.includes("WHATSAPP") && env().OWNER_CONTACT_WHATSAPP) {
+        const waSid = env().TWILIO_WA_TEMPLATE_TEST_RELEASE;
+        await notify({
+          recipientId,
+          channel: "WHATSAPP",
+          purpose: "TEST",
+          to: env().OWNER_CONTACT_WHATSAPP!,
+          text: testShort,
+          ...(waSid && {
+            waContentSid: waSid,
+            waContentVariables: { "1": recipient.displayName, "2": link },
+          }),
         });
       }
       continue;
@@ -134,12 +183,17 @@ This link expires on ${expiresAt.toUTCString()}.
       });
     }
     if (recipient.whatsappNumber) {
+      const waSid = env().TWILIO_WA_TEMPLATE_RELEASE;
       await notify({
         recipientId,
         channel: "WHATSAPP",
         purpose: "RELEASE",
         to: recipient.whatsappNumber,
         text: `You have a message. Open: ${link}`,
+        ...(waSid && {
+          waContentSid: waSid,
+          waContentVariables: { "1": link },
+        }),
       });
     }
   }

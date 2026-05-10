@@ -18,6 +18,9 @@ const schema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   APP_URL: z.string().url(),
   PORT: z.coerce.number().int().positive().default(3000),
+  LOG_LEVEL: z
+    .enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"])
+    .default("info"),
 
   DATABASE_URL: z.string().min(1),
   DATA_DIR: z.string().min(1).default("/data"),
@@ -43,6 +46,9 @@ const schema = z.object({
   TWILIO_AUTH_TOKEN: emptyToUndef(z.string().optional()),
   TWILIO_FROM_SMS: emptyToUndef(z.string().optional()),
   TWILIO_FROM_WHATSAPP: emptyToUndef(z.string().optional()),
+  TWILIO_WA_TEMPLATE_WARNING: emptyToUndef(z.string().optional()),
+  TWILIO_WA_TEMPLATE_RELEASE: emptyToUndef(z.string().optional()),
+  TWILIO_WA_TEMPLATE_TEST_RELEASE: emptyToUndef(z.string().optional()),
 
   OWNER_WARNING_CHANNELS: z
     .string()

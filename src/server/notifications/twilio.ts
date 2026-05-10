@@ -28,13 +28,18 @@ export async function sendSms(
 export async function sendWhatsapp(
   to: string,
   body: string,
+  contentSid?: string,
+  contentVariables?: Record<string, string>,
 ): Promise<{ id?: string; error?: string }> {
   const c = get();
   const from = env().TWILIO_FROM_WHATSAPP;
   if (!c || !from) return { error: "twilio WhatsApp not configured" };
   try {
     const waTo = to.startsWith("whatsapp:") ? to : `whatsapp:${to}`;
-    const msg = await c.messages.create({ from, to: waTo, body });
+    const params = contentSid
+      ? { from, to: waTo, contentSid, contentVariables: JSON.stringify(contentVariables ?? {}) }
+      : { from, to: waTo, body };
+    const msg = await c.messages.create(params);
     return { id: msg.sid };
   } catch (err) {
     return { error: (err as Error).message };

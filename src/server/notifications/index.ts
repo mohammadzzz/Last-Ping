@@ -1,8 +1,11 @@
 import { prisma } from "@/server/db";
 import type { Channel, NotifPurpose } from "@prisma/client";
+import { createLogger } from "@/lib/logger";
 import { sendEmail } from "./email-resend";
 import { sendTelegram } from "./telegram";
 import { sendSms, sendWhatsapp } from "./twilio";
+
+const log = createLogger("notifications");
 
 export interface NotifyRequest {
   recipientId?: string | null;
@@ -12,9 +15,15 @@ export interface NotifyRequest {
   subject?: string;
   text: string;
   html?: string;
+  waContentSid?: string;
+  waContentVariables?: Record<string, string>;
 }
 
 export async function notify(r: NotifyRequest): Promise<{ ok: boolean; error?: string; id?: string }> {
+  log.info(
+    { channel: r.channel, purpose: r.purpose, recipientId: r.recipientId ?? null },
+    "notification send start",
+  );
   const attempt = await prisma.notificationAttempt.create({
     data: {
       recipientId: r.recipientId ?? null,
@@ -40,7 +49,7 @@ export async function notify(r: NotifyRequest): Promise<{ ok: boolean; error?: s
       result = await sendSms(r.to, r.text);
       break;
     case "WHATSAPP":
-      result = await sendWhatsapp(r.to, r.text);
+      result = await sendWhatsapp(r.to, r.text, r.waContentSid, r.waContentVariables);
       break;
   }
 
@@ -52,6 +61,28 @@ export async function notify(r: NotifyRequest): Promise<{ ok: boolean; error?: s
       error: result.error ?? null,
     },
   });
+
+  if (result.error) {
+    log.error(
+      {
+        channel: r.channel,
+        purpose: r.purpose,
+        recipientId: r.recipientId ?? null,
+        error: result.error,
+      },
+      "notification send failed",
+    );
+  } else {
+    log.info(
+      {
+        channel: r.channel,
+        purpose: r.purpose,
+        recipientId: r.recipientId ?? null,
+        providerMessageId: result.id,
+      },
+      "notification send ok",
+    );
+  }
 
   return { ok: !result.error, error: result.error, id: result.id };
 }

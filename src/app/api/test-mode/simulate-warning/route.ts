@@ -24,6 +24,12 @@ export async function POST(req: NextRequest) {
     data: { mode: "WARNING", warningStartedAt: state.warningStartedAt ?? new Date() },
   });
   try {
+    await prisma.notificationAttempt.deleteMany({
+      where: {
+        purpose: "WARNING",
+        attemptedAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
+      },
+    });
     await runDailyWarnings();
   } finally {
     await prisma.appState.update({

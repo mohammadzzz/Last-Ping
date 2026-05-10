@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 FROM node:22-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache python3 make g++ libc6-compat openssl
@@ -28,7 +26,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
-CMD ["node", "server.js"]
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && exec node server.js"]

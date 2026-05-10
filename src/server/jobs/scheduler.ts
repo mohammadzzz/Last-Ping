@@ -1,13 +1,13 @@
 import cron, { type ScheduledTask } from "node-cron";
-import pino from "pino";
 import { prisma } from "@/server/db";
+import { createLogger } from "@/lib/logger";
 import { runInactivityCheck } from "./inactivity-check";
 import { runDailyWarnings } from "./daily-warnings";
 import { runRecipientReminders } from "./recipient-reminders";
 import { runExpireUndownloaded } from "./expire-undownloaded";
 import { runExecuteDeletions } from "./execute-deletions";
 
-const log = pino({ name: "scheduler" });
+const log = createLogger("scheduler");
 
 let started = false;
 const tasks: ScheduledTask[] = [];
@@ -60,13 +60,20 @@ export async function startScheduler() {
     for (const j of JOBS) {
       const expr = mode === "test" ? j.testCron : j.cron;
       const t = cron.schedule(expr, async () => {
-        await withAdvisoryLock(j.id, async () => {
+        const acquired = await withAdvisoryLock(j.id, async () => {
+          const start = Date.now();
+          log.debug({ job: j.name }, "job start");
           try {
             await j.run();
+            log.info({ job: j.name, durationMs: Date.now() - start }, "job ok");
           } catch (err) {
-            log.error({ err, job: j.name }, "job failed");
+            log.error({ err, job: j.name, durationMs: Date.now() - start }, "job failed");
           }
+          return true;
         });
+        if (acquired === undefined) {
+          log.debug({ job: j.name }, "job skipped (lock held)");
+        }
       });
       tasks.push(t);
     }

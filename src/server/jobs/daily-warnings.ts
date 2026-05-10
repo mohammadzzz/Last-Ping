@@ -26,9 +26,8 @@ export async function runDailyWarnings() {
 
   const age = await effectiveAgeSeconds();
   const days = Math.floor(age / 86400);
-  const text = `⚠ Last Ping — you have not checked in for ~${days} day(s). If you do not check in by ${new Date(
-    now.getTime() + Math.max(0, env().RELEASE_AFTER_SECONDS - age) * 1000,
-  ).toUTCString()}, messages will be released to your recipients.`;
+  const deadline = new Date(now.getTime() + Math.max(0, env().RELEASE_AFTER_SECONDS - age) * 1000);
+  const text = `⚠ Last Ping — you have not checked in for ~${days} day(s). If you do not check in by ${deadline.toUTCString()}, messages will be released to your recipients.`;
 
   const channels = env().OWNER_WARNING_CHANNELS;
   const sends: Promise<unknown>[] = [];
@@ -65,12 +64,17 @@ export async function runDailyWarnings() {
     );
   }
   if (channels.includes("WHATSAPP") && env().OWNER_CONTACT_WHATSAPP) {
+    const waSid = env().TWILIO_WA_TEMPLATE_WARNING;
     sends.push(
       notify({
         channel: "WHATSAPP",
         purpose: "WARNING",
         to: env().OWNER_CONTACT_WHATSAPP!,
         text,
+        ...(waSid && {
+          waContentSid: waSid,
+          waContentVariables: { "1": String(days), "2": deadline.toUTCString() },
+        }),
       }),
     );
   }
