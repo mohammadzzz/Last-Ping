@@ -55,7 +55,6 @@ export async function POST(
     },
   });
 
-  const text = `Your Last Ping verification code is: ${code}\n\nIt expires in 10 minutes.`;
   if (channel === "EMAIL") {
     await notify({
       recipientId: rr.recipientId,
@@ -63,7 +62,7 @@ export async function POST(
       purpose: "OTP",
       to: dest,
       subject: "Your verification code",
-      text,
+      text: `Your Last Ping verification code is: ${code}\n\nIt expires in 10 minutes.`,
     });
   } else {
     await notify({
@@ -71,7 +70,7 @@ export async function POST(
       channel: "SMS",
       purpose: "OTP",
       to: dest,
-      text,
+      text: `Last Ping code: ${code}. Expires in 10 min.`,
     });
   }
 
