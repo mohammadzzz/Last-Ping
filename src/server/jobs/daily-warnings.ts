@@ -27,7 +27,7 @@ export async function runDailyWarnings() {
   const age = await effectiveAgeSeconds();
   const days = Math.floor(age / 86400);
   const deadline = new Date(now.getTime() + Math.max(0, env().RELEASE_AFTER_SECONDS - age) * 1000);
-  const text = `⚠ Last Ping — you have not checked in for ~${days} day(s). If you do not check in by ${deadline.toUTCString()}, messages will be released to your recipients.`;
+  const text = `Last Ping: no check-in for ${days} day(s). Check in by ${deadline.toUTCString()} or messages will be released.`;
 
   const channels = env().OWNER_WARNING_CHANNELS;
   const sends: Promise<unknown>[] = [];

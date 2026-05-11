@@ -35,6 +35,8 @@ Tests spin up a real `postgres:16-alpine` container via Testcontainers — Docke
 
 State transitions happen in `src/server/jobs/inactivity-check.ts`. A check-in (via `/login` session or `/checkin/[token]` PIN link) resets to `ACTIVE`.
 
+**Test mode** (`AppState.testMode`): toggled via `POST /api/test-mode/toggle` (requires TOTP). When on, `effectiveAgeSeconds()` multiplies real elapsed time by `TEST_MODE_SPEEDUP` (default 3600×), so 1 real second = 1 simulated hour. The scheduler also switches to accelerated cron expressions. This lets a full warning→release cycle be rehearsed in minutes without touching real recipients (test release notifications go to the owner instead).
+
 ### Key Layers
 
 - **`src/app/api/`** — Next.js App Router API routes (REST). Auth routes, check-in, file/recipient/assignment CRUD, recipient download flow (`r/[token]`), test-mode controls.
@@ -47,15 +49,25 @@ State transitions happen in `src/server/jobs/inactivity-check.ts`. A check-in (v
   - `storage/files.ts` — encrypt-to-disk / streaming decrypt; `storage/zip.ts` builds recipient ZIP via archiver
   - `auth/` — iron-session, argon2 password/PIN, otplib TOTP, CSRF
   - `guards/` — `requireOwner` / `requireRecipient` middleware helpers
+  - `rate-limit.ts` — DB-backed sliding window + lockout (`RateLimitBucket`); policies for login, OTP send/attempt, check-in link
 - **`src/lib/env.ts`** — Zod-validated env singleton; all env vars flow through here
 - **`src/lib/clock.ts`** — injectable clock; use `setClockForTesting()` in tests instead of mocking `Date`
 - **`src/instrumentation.ts`** — Next.js instrumentation hook that starts the scheduler on server boot; disable with `LAST_PING_DISABLE_JOBS=1`
+
+### Recipient Download Flow
+
+`/r/[token]` is the one-time download path for recipients after release:
+1. Recipient visits the link; `lookupByToken` hashes the raw token and finds `ReleaseRecipient`.
+2. `POST /api/r/[token]/send-code` sends a 6-digit OTP via `preferredOtpChannel` (email or SMS).
+3. `POST /api/r/[token]/verify` validates the OTP, promotes status to `VERIFIED`, and writes an iron-session cookie (`lp_recipient`).
+4. `GET /r/[token]/download` — `requireVerifiedRecipient` enforces token + session match, builds a ZIP on first access (decrypting all assigned files), and streams it with Range support.
+5. On completion, `DeletionJob` is scheduled; `runExecuteDeletions` deletes the ZIP after `POST_DOWNLOAD_RETENTION_SECONDS` (default 3 days) and marks the `ReleaseRecipient` `DELETED`. Original `MediaFile` blobs are never auto-deleted.
 
 ### Testing Patterns
 
 - `tests/helpers/db.ts` — shared Testcontainers PostgreSQL singleton + `resetDb()` (truncates all tables between tests)
 - `tests/setup.ts` — injects minimum required env vars before any test runs
-- Clock and Prisma client are both injectable for tests — prefer `setClockForTesting` / `setPrismaForTesting` over module mocks
+- Clock and Prisma client are both injectable for tests — prefer `setClockForTesting` / `setPrismaForTesting` over module mocks; call `resetClockForTesting()` in `afterEach` when using a fake clock
 
 ### Encryption Model
 
