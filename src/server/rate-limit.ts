@@ -75,6 +75,9 @@ export async function resetRateLimit(key: string) {
 export const policies = {
   login: { max: 5, windowSec: 900, lockoutSec: 900 },
   checkinLink: { max: 5, windowSec: 900, lockoutSec: 900 },
+  // Read endpoints (status, history) — looser limit so iOS / widget polls
+  // don't trip lockout. PIN-guessing surface still bounded.
+  checkinLinkRead: { max: 60, windowSec: 900, lockoutSec: 900 },
   otpAttempt: { max: 5, windowSec: 600, lockoutSec: 1800 },
   otpSend: { max: 5, windowSec: 3600, lockoutSec: 3600 },
 } as const satisfies Record<string, RateLimitPolicy>;

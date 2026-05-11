@@ -25,8 +25,8 @@ export async function POST(req: NextRequest) {
   const rlIpKey = `history_link_ip:${ipH}`;
   const rlTokenKey = `history_link_token:${parsed.data.token.slice(0, 12)}`;
   const [rlIp, rlToken] = await Promise.all([
-    consumeRateLimit(rlIpKey, policies.checkinLink),
-    consumeRateLimit(rlTokenKey, policies.checkinLink),
+    consumeRateLimit(rlIpKey, policies.checkinLinkRead),
+    consumeRateLimit(rlTokenKey, policies.checkinLinkRead),
   ]);
   if (!rlIp.allowed || !rlToken.allowed) {
     return NextResponse.json({ error: "too many attempts" }, { status: 429 });
