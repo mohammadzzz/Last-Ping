@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "5gb",
     },
   },
-  serverExternalPackages: ["argon2", "archiver"],
+  serverExternalPackages: ["argon2", "archiver", "twilio", "node-cron"],
 };
 
 export default nextConfig;
