@@ -147,7 +147,7 @@ This link expires on ${expiresAt.toUTCString()}.
           text: testShort,
           ...(waSid && {
             waContentSid: waSid,
-            waContentVariables: { "1": recipient.displayName, "2": link },
+            waContentVariables: { "1": env().OWNER_DISPLAY_NAME, "2": env().OWNER_CONTACT_EMAIL ?? "" },
           }),
         });
       }
@@ -189,10 +189,10 @@ This link expires on ${expiresAt.toUTCString()}.
         channel: "WHATSAPP",
         purpose: "RELEASE",
         to: recipient.whatsappNumber,
-        text: `You have a message. Open: ${link}`,
+        text: `You have a message from ${env().OWNER_DISPLAY_NAME}. Check ${recipient.email ?? "your email"} for the download link.`,
         ...(waSid && {
           waContentSid: waSid,
-          waContentVariables: { "1": link },
+          waContentVariables: { "1": env().OWNER_DISPLAY_NAME, "2": recipient.email ?? "" },
         }),
       });
     }

@@ -50,6 +50,8 @@ const schema = z.object({
   TWILIO_WA_TEMPLATE_RELEASE: emptyToUndef(z.string().optional()),
   TWILIO_WA_TEMPLATE_TEST_RELEASE: emptyToUndef(z.string().optional()),
 
+  OWNER_DISPLAY_NAME: z.string().min(1).default("Mohammad"),
+
   OWNER_WARNING_CHANNELS: z
     .string()
     .default("EMAIL")
